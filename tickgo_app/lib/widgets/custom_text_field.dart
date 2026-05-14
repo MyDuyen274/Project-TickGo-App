@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart'; // 👉 THÊM IMPORT NÀY ĐỂ XÀI FORMATTER
 
 class CustomTextField extends StatelessWidget {
   final String label;
@@ -9,6 +10,9 @@ class CustomTextField extends StatelessWidget {
   final VoidCallback? onTap;
   final TextInputType? keyboardType;
   final int maxLines;
+  
+  // 👉 1. KHAI BÁO THÊM BIẾN NÀY ĐỂ NHẬN LIST FORMATTER
+  final List<TextInputFormatter>? inputFormatters; 
 
   const CustomTextField({
     super.key,
@@ -20,6 +24,7 @@ class CustomTextField extends StatelessWidget {
     this.onTap,
     this.keyboardType,
     this.maxLines = 1,
+    this.inputFormatters, // 👉 2. THÊM VÀO HÀM KHỞI TẠO (CONSTRUCTOR)
   });
 
   @override
@@ -30,6 +35,7 @@ class CustomTextField extends StatelessWidget {
       onTap: onTap,
       keyboardType: keyboardType,
       maxLines: maxLines,
+      inputFormatters: inputFormatters, // 👉 3. GẮN VÀO THUỘC TÍNH CỦA TEXTFIELD
       decoration: InputDecoration(
         labelText: label,
         hintText: hint,
@@ -46,7 +52,7 @@ class CustomTextField extends StatelessWidget {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: const Color(0xFF1976D2), width: 2),
+          borderSide: const BorderSide(color: Color(0xFF1976D2), width: 2),
         ),
       ),
     );

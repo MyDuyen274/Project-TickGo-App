@@ -2,8 +2,8 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 class ApiService {
-  // THAY DÃY SỐ NÀY BẰNG ĐỊA CHỈ IPV4 BỒ VỪA TÌM ĐƯỢC Ở BƯỚC 1 NHÉ!
-  static const String baseUrl = 'http://localhost:3000/api'; 
+  // THAY DÃY SỐ NÀY BẰNG ĐỊA CHỈ IPV4 MÁY NHÉ!
+  static const String baseUrl = 'https://patrological-tyron-unambitiously.ngrok-free.dev/api'; 
 
   // 1. Hàm LẤY danh sách sự kiện từ Node.js
   Future<List<dynamic>> fetchEvents() async {

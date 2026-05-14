@@ -2,106 +2,117 @@ const express = require('express');
 const cors = require('cors');
 const admin = require('firebase-admin');
 
-// 1. Khởi tạo App Express
 const app = express();
 app.use(cors());
-app.use(express.json()); // Để server hiểu được data dạng JSON gửi lên
+app.use(express.json());
 
-// 2. Nạp "chìa khóa vạn năng" (Đảm bảo file serviceAccountKey.json nằm cùng thư mục)
 const serviceAccount = require('./serviceAccountKey.json');
 
-// 3. Khởi tạo Firebase Admin
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount)
 });
 
-// Kết nối với Firestore Database
 const db = admin.firestore();
 
 // ==========================================
-// KHU VỰC TẠO CÁC API (CỔNG GIAO TIẾP)
+// TỰ ĐỘNG NẠP DỮ LIỆU MẪU (SEED DATA)
 // ==========================================
-
-// API Test: Bắn thử một câu chào để xem server có chạy không
-app.get('/api/test', (req, res) => {
-  res.json({ message: "Server Node.js cho TickGo đang hoạt động cực mượt! 🚀" });
-});
-
-// API Thử nghiệm: Lấy danh sách toàn bộ người dùng (Bỏ qua luật bảo mật của Flutter)
-app.get('/api/users', async (req, res) => {
+const seedData = async () => {
   try {
-    const snapshot = await db.collection('users').get();
-    const users = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    res.status(200).json(users);
-  } catch (error) {
-    res.status(500).json({ error: "Lỗi khi lấy dữ liệu: " + error.message });
-  }
-});
-
-// ==========================================
-// KHỞI ĐỘNG SERVER
-// ==========================================
-const PORT = 3000;
-app.listen(PORT, () => {
-  console.log(`✅ Server Backend đang chạy tại: http://localhost:${PORT}`);
-  console.log(`✅ Firebase Admin kết nối thành công!`);
-});
-// ==========================================
-// API SỰ KIỆN (EVENTS)
-// ==========================================
-
-// 1. API Tạo sự kiện mới (Thường dành cho Admin)
-app.post('/api/events', async (req, res) => {
-  try {
-    // Nhận dữ liệu từ điện thoại/web gửi lên
-    const { title, date, price, imageUrl, description } = req.body;
-
-    // Kiểm tra xem có gửi thiếu thông tin không
-    if (!title || !date || !price) {
-      return res.status(400).json({ error: "Vui lòng nhập đủ Tên, Ngày và Giá vé!" });
+    const eventsRef = db.collection('events');
+    const eventSnapshot = await eventsRef.get();
+    if (eventSnapshot.empty) {
+      const dummyEvents = [
+        {
+          title: "WORLD TOUR: TWICE READY TO BE",
+          date: "19:00, 15/05/2026",
+          location: "Hồ Chí Minh",
+          price: 2500000,
+          imageUrl: "https://picsum.photos/id/1025/600/400",
+          description: "READY TO BE WORLD TOUR in VN.",
+          createdAt: admin.firestore.FieldValue.serverTimestamp()
+        },
+        {
+          title: "ĐÊM NHẠC VŨ. & LÂN NHÃ",
+          date: "20:00, Tối nay",
+          location: "Đà Lạt",
+          price: 450000,
+          imageUrl: "https://picsum.photos/id/158/600/400",
+          description: "Acoustic night.",
+          createdAt: admin.firestore.FieldValue.serverTimestamp()
+        }
+      ];
+      for (const e of dummyEvents) await eventsRef.add(e);
+      console.log("✅ Đã nạp Events mẫu!");
     }
 
-    // Đóng gói dữ liệu
-    const newEvent = {
-      title: title,
-      date: date,
-      price: Number(price), // Đảm bảo giá là số
-      imageUrl: imageUrl || "https://via.placeholder.com/400", // Ảnh mặc định nếu thiếu
-      description: description || "Sự kiện siêu hấp dẫn tại TickGo!",
-      createdAt: admin.firestore.FieldValue.serverTimestamp(), // Giờ hệ thống chuẩn
-    };
+    const userUID = "ckq4U85y3Ka9w4QCZgEVuFERlWY2"; 
+    const userRef = db.collection('users').doc(userUID);
+    const userDoc = await userRef.get();
+    if (!userDoc.exists) {
+      await userRef.set({
+        full_name: "Minh Anh",
+        email: "mmaa@gmail.com",
+        createdAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+      console.log("✅ Đã tạo User mẫu có full_name!");
+    }
+  } catch (e) { console.log("Lỗi Seed Data: ", e); }
+};
 
-    // Đẩy lên Firestore
-    const docRef = await db.collection('events').add(newEvent);
-    
-    // Báo cáo thành công
+seedData();
+
+// --- API ROUTES (Lấy danh sách sk) ---
+app.get('/api/events', async (req, res) => {
+  try {
+    const snapshot = await db.collection('events').orderBy('createdAt', 'desc').get();
+    const events = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    res.status(200).json(events);
+  } catch (error) { res.status(500).json({ error: error.message }); }
+});
+
+// 👉 API Tạo sự kiện mới & Bắn thông báo (ĐÃ CẬP NHẬT)
+app.post('/api/events', async (req, res) => {
+  try {
+    const eventData = req.body; 
+    eventData.createdAt = admin.firestore.FieldValue.serverTimestamp();
+
+    // 1. Lưu sự kiện vào Firestore
+    const docRef = await db.collection('events').add(eventData);
+    console.log(`✅ Đã tạo thành công sự kiện mới có ID: ${docRef.id}`);
+
+    // 2. TẠO TIN NHẮN VÀ BẮN THÔNG BÁO TỚI KÊNH "new_events"
+    try {
+      const message = {
+        notification: {
+          title: "🔥 Sự kiện mới vừa mở bán!",
+          // Lấy luôn tên sự kiện vừa tạo để nhét vào thông báo cho xịn
+          body: `"${eventData.title}" đã có mặt trên TickGo. Đặt vé ngay kẻo lỡ!`
+        },
+        topic: "new_events" // Gửi tới tất cả user đã cài app
+      };
+
+      // Gọi lệnh bắn thông báo của Firebase Admin
+      const response = await admin.messaging().send(message);
+      console.log("🚀 Đã bắn thông báo Push Notification thành công:", response);
+    } catch (fcmError) {
+      // Dùng try-catch riêng ở đây để lỡ gửi thông báo xịt thì sự kiện vẫn được tạo thành công
+      console.error("❌ Lỗi khi bắn thông báo:", fcmError);
+    }
+
+    // 3. Trả kết quả về cho Flutter
     res.status(201).json({ 
-      message: "Tạo sự kiện thành công!", 
-      eventId: docRef.id 
+      message: "Tạo sự kiện và gửi thông báo thành công", 
+      id: docRef.id,
+      data: eventData 
     });
-
-  } catch (error) {
-    res.status(500).json({ error: "Lỗi khi tạo sự kiện: " + error.message });
+  } catch (error) { 
+    console.error("❌ Lỗi tạo sự kiện: ", error);
+    res.status(500).json({ error: error.message }); 
   }
 });
 
-
-// 2. API Lấy danh sách sự kiện (Để hiển thị ở trang chủ Flutter)
-app.get('/api/events', async (req, res) => {
-  try {
-    // Kéo dữ liệu từ collection 'events', sắp xếp mới nhất lên đầu
-    const snapshot = await db.collection('events').orderBy('createdAt', 'desc').get();
-    
-    // Gói gém lại cho đẹp
-    const events = snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    }));
-
-    // Gửi trả về cho app Flutter
-    res.status(200).json(events);
-
-  } catch (error) {
-    res.status(500).json({ error: "Lỗi khi tải danh sách: " + error.message });
-  }
+const PORT = 3000;
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`✅ Server chạy tại: http://localhost:${PORT}`);
 });

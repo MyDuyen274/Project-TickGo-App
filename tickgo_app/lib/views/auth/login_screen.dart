@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart'; // 👉 Thêm thư viện này để dùng chức năng quên pass
 import '../../data/services/auth_service.dart';
-import '../home/home_screen.dart';
-import 'register_screen.dart'; // Import thêm trang đăng ký
+import '../main_layout.dart'; // 👉 Đổi import sang MainLayout để giữ được thanh Menu dưới đáy
+import 'register_screen.dart'; 
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -17,6 +18,49 @@ class _LoginScreenState extends State<LoginScreen> {
   
   bool _isLoading = false;
   bool _isPasswordVisible = false; // Trạng thái của con mắt hiển thị mật khẩu
+
+  // 👉 HÀM GỬI EMAIL ĐẶT LẠI MẬT KHẨU
+  void _resetPassword() async {
+    String email = _emailController.text.trim(); 
+    
+    if (email.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Vui lòng nhập Email của bạn vào ô trên để lấy lại mật khẩu!"), backgroundColor: Colors.orange),
+      );
+      return;
+    }
+
+    // Hiện vòng xoay loading
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(child: CircularProgressIndicator()),
+    );
+
+    try {
+      // Gọi Firebase gửi mail
+      await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
+      
+      if (mounted) Navigator.pop(context); // Tắt loading
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("✅ Đã gửi link đặt lại mật khẩu! Vui lòng kiểm tra Email (cả mục Thư rác/Spam)."),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 5),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) Navigator.pop(context); // Tắt loading
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Lỗi: Không tìm thấy tài khoản hoặc email không hợp lệ."), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
 
   void _login() async {
     // Kiểm tra rỗng
@@ -38,10 +82,10 @@ class _LoginScreenState extends State<LoginScreen> {
 
     if (result == "Success") {
       if (!mounted) return;
-      // Đăng nhập thành công -> Bay vào trang Home
+      // 👉 Đăng nhập thành công -> Bay vào MainLayout để có thanh menu
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (context) => const HomeScreen()),
+        MaterialPageRoute(builder: (context) => const MainLayout()),
       );
     } else {
       // Hiện thông báo lỗi
@@ -143,7 +187,20 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 30),
+                  
+                  // 👉 NÚT QUÊN MẬT KHẨU
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton(
+                      onPressed: _resetPassword,
+                      child: const Text(
+                        "Quên mật khẩu?", 
+                        style: TextStyle(color: Color(0xFF1976D2), fontWeight: FontWeight.bold)
+                      ),
+                    ),
+                  ),
+                  
+                  const SizedBox(height: 16),
                   
                   // Nút Đăng nhập
                   _isLoading 
